@@ -262,6 +262,8 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 ```
 ### 4단계: popup.html 작성
 * 숫자를 입력하여 확장 프로그램에 입력할 웹 페이지
+* https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js 에 접속하여 tf.min.js 파일을 다운로드하거나 아래처럼...
+* <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
 ```html
 <!DOCTYPE html>
 <html>
