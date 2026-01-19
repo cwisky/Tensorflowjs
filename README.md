@@ -124,8 +124,59 @@ pip install tensorflow==2.15.0 tensorflowjs==4.17.0
 # 2. 오류를 일으키는 Decision Forests 모듈 제거
 pip uninstall tensorflow-decision-forests -y
 ```
-* 변환 툴은 오류를 발생하는 경우가 많으므로 아래의 코드를 사용하여 변환
-  + *.keras, *.h5 모두 생성해서 테스트한다 (h5 포맷이 호환성이 더 높음)
+
+* 홀수/짝수 분류모델 생성
+```python
+# simple_odd_even.py
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+
+# 데이터 생성
+X = np.arange(0, 1001).reshape(-1, 1).astype(np.float32)
+y = (X.flatten() % 2).astype(np.float32)
+
+# 모델 정의
+model = keras.Sequential([
+    keras.layers.Dense(16, activation='relu', input_shape=(1,), name='hidden_layer_1'),
+    keras.layers.Dense(8, activation='relu', name='hidden_layer_2'),
+    keras.layers.Dense(1, activation='sigmoid', name='output_layer')
+])
+
+# 컴파일
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# 학습
+model.fit(X, y, epochs=50, batch_size=32, validation_split=0.2, verbose=1)
+
+# 저장
+model.save('odd_even_model.keras')
+print("\n모델 저장 완료: odd_even_model.keras")
+
+model.save('odd_even_model.h5')
+print("✓ H5 모델 저장: odd_even_model.h5")
+
+# 가중치만 별도로 저장 (가장 권장 - 구조적 오류 회피용)
+model.save_weights('odd_even_weights.weights.h5') 
+print("가중치 저장 완료: odd_even_weights.weights.h5")
+
+# 테스트
+test_numbers = [10, 11, 100, 101]
+for num in test_numbers:
+    pred = model.predict(np.array([[num]]), verbose=0)[0][0]
+    result = "홀수" if pred > 0.5 else "짝수"
+    print(f"{num} → {result}")
+```
+
+## Tensorflow 모델을 Javascript기반에서 실행할 수 있도록 변환하기
+* 파이썬 기반에서 Tensorflowjs 모듈을 사용하여 모델 변환
+  + 아래의 툴은 버전 차이로 오류를 발생할 경우가 많으므로 아래의 변환용 코드를 사용하는 것을 고려해야 함
+```python
+# tensorflowjs_converter --input_format=keras [모델경로] [저장될디렉토리]
+tensorflowjs_converter --input_format=keras ./odd_even_model.keras ./tfjs_model
+```
+* 변환용 코드를 사용하여 변환하기(*.keras, *.h5 모두 생성해서 테스트한다 (h5 포맷이 호환성이 더 높음))
+* 아래의 코드에서 사용된 가중치만 로드하는 방식은 파일의 구조에 의존하지 않으므로 호환성이 더 높음음
 ```python
 import sys
 from types import ModuleType
@@ -186,15 +237,6 @@ except Exception as e:
     print("힌트: 학습 코드에서 반드시 model.save('odd_even_model.h5')로 저장한 뒤 시도하세요.")
 ```
 
-* 홀수/짝수 분류모델 생성
-
-## Tensorflow 모델을 Javascript기반에서 실행할 수 있도록 변환하기
-* 파이썬 기반에서 Tensorflowjs 모듈을 사용하여 모델 변환
-  + 아래의 방법은 버전 차이로 오류를 발생할 경우가 많으므로 위의 변환용 코드를 사용하는 것을 고려해야 함
-```python
-# tensorflowjs_converter --input_format=keras [모델경로] [저장될디렉토리]
-tensorflowjs_converter --input_format=keras ./odd_even_model.keras ./tfjs_model
-```
 * 변환된 모델 구성파일 확인 (위의 명령에서 사용한 tfjs_model 디렉토리 확인)
 ```text
 model.json: 모델의 구조(Layer, 가중치 연결 등)가 정의된 파일.
