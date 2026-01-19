@@ -125,47 +125,42 @@ pip install tensorflow==2.15.0 tensorflowjs==4.17.0
 pip uninstall tensorflow-decision-forests -y
 ```
 
-* 홀수/짝수 분류모델 생성
+* y = 2x + 1 직선의 방정식에 노이즈를 추가한 데이터 회귀모델 생성
 ```python
-# simple_odd_even.py
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-# 데이터 생성
-X = np.arange(0, 1001).reshape(-1, 1).astype(np.float32)
-y = (X.flatten() % 2).astype(np.float32)
+# 1. 데이터 생성 (y = 2x + 1)
+# -10부터 10까지 100개의 데이터를 생성합니다.
+X = np.linspace(-10, 10, 100)
+# 실제 수식에 아주 약간의 무작위 노이즈를 더해 학습 효율을 높입니다.
+y = 2 * X + 1 + np.random.normal(0, 0.1, X.shape)
 
-# 모델 정의
+# 2. 모델 정의
 model = keras.Sequential([
-    keras.layers.Dense(16, activation='relu', input_shape=(1,), name='hidden_layer_1'),
-    keras.layers.Dense(8, activation='relu', name='hidden_layer_2'),
-    keras.layers.Dense(1, activation='sigmoid', name='output_layer')
+    # 입력 1개, 출력 1개인 가장 단순한 선형 레이어
+    keras.layers.Dense(units=1, input_shape=(1,), name='linear_layer'),
+    keras.layers.Dense(units=1, name='output_layer')
 ])
 
-# 컴파일
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+# 3. 컴파일 및 학습
+# 선형 회귀에는 'adam' 옵티마이저와 'mse' 손실함수가 가장 적합합니다.
+model.compile(optimizer=keras.optimizers.Adam(0.1), loss='mse')
+print("학습 시작...")
+model.fit(X, y, epochs=200, verbose=0)
 
-# 학습
-model.fit(X, y, epochs=50, batch_size=32, validation_split=0.2, verbose=1)
+# 4. 검증 (입력 10일 때 결과는 약 21이 나와야 함)
+test_val = np.array([[10.0]])
+prediction = model.predict(test_val)
+print(f"예측 결과: 입력 10.0 -> 출력 {prediction[0][0]:.4f} (정답: 21.0)")
 
-# 저장
-model.save('odd_even_model.keras')
-print("\n모델 저장 완료: odd_even_model.keras")
+# 5. 세 가지 방식으로 저장 (확장 프로그램 변환 대비)
+model.save('linear_reg_model.keras')          # Keras V3
+model.save('linear_reg_model.h5')             # Legacy H5
+model.save_weights('linear_reg_weights.weights.h5') # 가중치 전용
 
-model.save('odd_even_model.h5')
-print("✓ H5 모델 저장: odd_even_model.h5")
-
-# 가중치만 별도로 저장 (가장 권장 - 구조적 오류 회피용)
-model.save_weights('odd_even_weights.weights.h5') 
-print("가중치 저장 완료: odd_even_weights.weights.h5")
-
-# 테스트
-test_numbers = [10, 11, 100, 101]
-for num in test_numbers:
-    pred = model.predict(np.array([[num]]), verbose=0)[0][0]
-    result = "홀수" if pred > 0.5 else "짝수"
-    print(f"{num} → {result}")
+print("저장 완료: linear_reg_model.keras, .h5, .weights.h5")
 ```
 
 ## Tensorflow 모델을 Javascript기반에서 실행할 수 있도록 변환하기
@@ -193,19 +188,19 @@ print("최종 해결책: load_weights 방식 시작")
 
 # 2. 새 모델 정의 (학습 시 모델 구조와 정확히 동일해야 함)
 new_model = tf.keras.Sequential([
-    tf.keras.layers.Dense(16, activation='relu', input_shape=(1,), name='hidden_layer_1'),
-    tf.keras.layers.Dense(8, activation='relu', name='hidden_layer_2'),
-    tf.keras.layers.Dense(1, activation='sigmoid', name='output_layer')
+    # 입력 1개, 출력 1개인 가장 단순한 선형 레이어
+    tf.keras.layers.Dense(units=1, input_shape=(1,), name='linear_layer'),
+    tf.keras.layers.Dense(units=1, name='output_layer')
 ])
 
 try:
     # 3. 가중치 파일 로드 (.weights.h5 파일을 사용하면 메타데이터 충돌이 없습니다)
     # 만약 odd_even_weights.weights.h5가 없다면 odd_even_model.h5를 넣어보세요.
     try:
-        new_model.load_weights('odd_even_weights.weights.h5')
+        new_model.load_weights('linear_reg_weights.weights.h5')  # linear_reg_weights.weights.h5
         print("성공: 전용 가중치 파일에서 로드 완료")
     except:
-        new_model.load_weights('odd_even_model.h5')
+        new_model.load_weights('linear_reg_model.h5')
         print("성공: 전체 모델 파일에서 가중치 로드 완료")
 
     # 4. TFJS 변환
@@ -248,7 +243,7 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 ```json
 {
   "manifest_version": 3,
-  "name": "AI Odd Even",
+  "name": "y = 2x + 1 회귀 모델",
   "version": "1.0",
   "action": { "default_popup": "popup.html" },
   "web_accessible_resources": [
@@ -267,12 +262,12 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Odd Even AI</title>
+  <title>y = 2x + 1 회귀 모델</title>
 </head>
 <body style="width: 200px; padding: 10px;">
-  <h3>짝수/홀수 판별 AI</h3>
+  <h3>y = 2x + 1 회귀 모델</h3>
   <input type="number" id="numberInput" placeholder="숫자 입력">
-  <button id="predictBtn">판별하기</button>
+  <button id="predictBtn">예측하기</button>
   <p id="resultText">모델 로딩 중...</p>
 
     <!-- popup.html -->
@@ -320,10 +315,9 @@ async function predict() {
   const num = parseFloat(inputVal);
   const inputTensor = tfEngine.tensor2d([[num]]);
   const prediction = model.predict(inputTensor);
-  const score = (await prediction.data())[0];
+  const y_val = (await prediction.data())[0];
 
-  const result = score > 0.5 ? "홀수" : "짝수";
-  document.getElementById('resultText').innerText = `결과: ${result}`;
+  document.getElementById('resultText').innerText = `예측 결과: ${y_val}`;
 }
 
 document.getElementById('predictBtn').addEventListener('click', predict);
