@@ -1,8 +1,8 @@
 # Tensorflowjs
 * Python 기반에서 생성된 머신러닝 모델을 Javascript기반에서 실행할 수 있도록 변환해주는 파이썬 모듈
-* 변환된 모델은 model.JSON, BIN 파일을 포함
+* 변환된 모델은 model.json, group1-shard1of1.bin 파일을 포함
 * Javascript에서는 Tensorflow.js 라이브러리를 사용하여 model.json을 로드하고 사용함
-* 크롬 확장프로그램에서 실행되는 Javascript에 model.json, BIN을 포함시키면 브라우저 기반에서 모델을 사용할 수 있음
+* 크롬 확장프로그램에서 실행되는 Javascript에 model.json, group1-shard1of1.bin을 포함시키면 브라우저 기반에서 모델을 사용할 수 있음
 
 ## 크롬 브라우저에서 Hello World 확장프로그램 (Chrome Extension) 작성하기
 ### 1. 폴더 및 파일 생성
@@ -225,6 +225,6 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 ```
 
 ## 크롬 확장프로그램에 변환된 모델 추가하기
-* model.json, BIN 파일 내용을 Javascript코드에 포함
+* model.json, group1-shard1of1.bin 파일 내용을 Javascript코드에 포함
 * Javascript기반에서 사용되는 tensorflow.js 라이브러리 사용하여 모델 실행
 * 브라우저 화면에 분류 결과 표시
