@@ -228,3 +228,102 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 * model.json, group1-shard1of1.bin 파일 내용을 Javascript코드에 포함
 * Javascript기반에서 사용되는 tensorflow.js 라이브러리 사용하여 모델 실행
 * 브라우저 화면에 분류 결과 표시
+### 1단계: 확장 프로그램 폴더 구조 만들기
+* my_extension/
+  + manifest.json (확장 프로그램 설정)
+  + popup.html (사용자 화면)
+  + popup.js (모델 로드 및 로직)
+  + tf.min.js (TensorFlow.js 라이브러리)
+  + model/ (변환된 폴더)
+    - model.json
+    - group1-shard1of1.bin
+### 2단계: TensorFlow.js 라이브러리 다운로드
+* TensorFlow.js 공식 GitHub에서 tf.min.js를 다운로드하여 폴더에 저장
+
+### 3단계: manifest.json 작성
+* 확장프로그램의 정보 정의 (web_accessible_resources 설정으로 브라우저가 .bin가중치 파일에 접근 가능함)
+```json
+{
+  "manifest_version": 3,
+  "name": "Odd-Even Classifier AI",
+  "version": "1.0",
+  "description": "AI가 짝수/홀수를 판별합니다.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [],
+  "web_accessible_resources": [
+    {
+      "resources": ["model/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+```
+### 4단계: popup.html 작성
+* 숫자를 입력하여 확장 프로그램에 입력할 웹 페이지
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Odd Even AI</title>
+</head>
+<body style="width: 200px; padding: 10px;">
+  <h3>짝수/홀수 판별 AI</h3>
+  <input type="number" id="numberInput" placeholder="숫자 입력">
+  <button id="predictBtn">판별하기</button>
+  <p id="resultText">모델 로딩 중...</p>
+
+  <script src="tf.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
+```
+
+### 5단계: popup.js 작성
+* 모델을 불러오고 예측을 실행하는 핵심 로직
+```javascript
+let model;
+
+// 모델 로드 함수
+async function loadModel() {
+  try {
+    const modelUrl = chrome.runtime.getURL('model/model.json');
+    model = await tf.loadLayersModel(modelUrl);
+    document.getElementById('resultText').innerText = "AI 준비 완료!";
+  } catch (error) {
+    document.getElementById('resultText').innerText = "모델 로드 실패";
+    console.error(error);
+  }
+}
+
+// 예측 함수
+async function predict() {
+  const inputVal = document.getElementById('numberInput').value;
+  if (!inputVal || !model) return;
+
+  const num = parseFloat(inputVal);
+  
+  // 파이썬 학습 시의 입력 형태 [None, 1]에 맞춰 텐서 생성
+  const inputTensor = tf.tensor2d([[num]]);
+  const prediction = model.predict(inputTensor);
+  const score = (await prediction.data())[0]; // 0~1 사이의 값 (sigmoid)
+
+  const result = score > 0.5 ? "홀수" : "짝수";
+  const confidence = (score > 0.5 ? score : 1 - score) * 100;
+
+  document.getElementById('resultText').innerText = 
+    `결과: ${result} (${confidence.toFixed(2)}%)`;
+}
+
+document.getElementById('predictBtn').addEventListener('click', predict);
+loadModel();
+```
+### 6단계: 크롬에 설치하기
+#### 1. 크롬 브라우저 주소창에 chrome://extensions/를 입력하여 접속.
+#### 2. 오른쪽 상단의 '개발자 모드'를 켭니다.
+#### 3. 왼쪽 상단의 '압축해제된 확장 프로그램을 로드' 버튼을 클릭.
+#### 4. 작업한 my_extension 폴더를 선택.
+#### 5. 확장 프로그램 아이콘을 클릭하여 숫자를 입력하고 결과를 확인
+
