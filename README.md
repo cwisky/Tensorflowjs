@@ -111,7 +111,15 @@ hello-world-extension/
 
 ## Tensorflow 모델을 Javascript기반에서 실행할 수 있도록 변환하기
 * 파이썬 기반에서 Tensorflowjs 모듈을 사용하여 모델 변환
-* 변환된 모델 구성파일 확인
+```python
+# tensorflowjs_converter --input_format=keras [모델경로] [저장될디렉토리]
+tensorflowjs_converter --input_format=keras ./odd_even_model.keras ./tfjs_model
+```
+* 변환된 모델 구성파일 확인 (위의 명령에서 사용한 tfjs_model 디렉토리 확인)
+```text
+model.json: 모델의 구조(Layer, 가중치 연결 등)가 정의된 파일.
+group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이진 파일
+```
 
 ## 크롬 확장프로그램에 변환된 모델 추가하기
 * model.json, BIN 파일 내용을 Javascript코드에 포함
