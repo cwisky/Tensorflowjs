@@ -234,27 +234,26 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
   + popup.html (사용자 화면)
   + popup.js (모델 로드 및 로직)
   + tf.min.js (TensorFlow.js 라이브러리)
+  + tf-core.min.js
+  + tf-backend-cpu.min.js
+  + tf-layers.min.js
   + model/ (변환된 폴더)
     - model.json
     - group1-shard1of1.bin
 ### 2단계: TensorFlow.js 라이브러리 다운로드
-* TensorFlow.js 공식 GitHub에서 tf.min.js를 다운로드하여 폴더에 저장
+* TensorFlow.js 공식 GitHub에서 tf.min.js 등을 다운로드하여 폴더에 저장(웹 검색)
 
 ### 3단계: manifest.json 작성
 * 확장프로그램의 정보 정의 (web_accessible_resources 설정으로 브라우저가 .bin가중치 파일에 접근 가능함)
 ```json
 {
   "manifest_version": 3,
-  "name": "Odd-Even Classifier AI",
+  "name": "AI Odd Even",
   "version": "1.0",
-  "description": "AI가 짝수/홀수를 판별합니다.",
-  "action": {
-    "default_popup": "popup.html"
-  },
-  "permissions": [],
+  "action": { "default_popup": "popup.html" },
   "web_accessible_resources": [
     {
-      "resources": ["model/*"],
+      "resources": ["model/*", "*.wasm"],
       "matches": ["<all_urls>"]
     }
   ]
@@ -263,7 +262,6 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 ### 4단계: popup.html 작성
 * 숫자를 입력하여 확장 프로그램에 입력할 웹 페이지
 * https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js 에 접속하여 tf.min.js 파일을 다운로드하거나 아래처럼...
-* <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
 ```html
 <!DOCTYPE html>
 <html>
@@ -277,8 +275,12 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
   <button id="predictBtn">판별하기</button>
   <p id="resultText">모델 로딩 중...</p>
 
-  <script src="tf.min.js"></script>
-  <script src="popup.js"></script>
+    <!-- popup.html -->
+    <script src="tf-core.min.js"></script>
+    <script src="tf-backend-cpu.min.js"></script>
+    <script src="tf-layers.min.js"></script>
+    <script src="popup.js"></script>
+
 </body>
 </html>
 ```
@@ -286,37 +288,42 @@ group1-shard1of1.bin: 실제 학습된 가중치(Weight) 데이터가 담긴 이
 ### 5단계: popup.js 작성
 * 모델을 불러오고 예측을 실행하는 핵심 로직
 ```javascript
-let model;
+// popup.js
 
-// 모델 로드 함수
+// 전역 객체 확보 (tf-core 로드 확인)
+const tfEngine = window.tf;
+
 async function loadModel() {
   try {
+    // 1. CPU 백엔드 명시적 설정
+    await tfEngine.setBackend('cpu');
+    console.log("CPU Backend 활성화");
+
+    // 2. 모델 로드
     const modelUrl = chrome.runtime.getURL('model/model.json');
-    model = await tf.loadLayersModel(modelUrl);
+    
+    // tf-layers가 로드되면 tf.loadLayersModel이 활성화됩니다.
+    model = await tfEngine.loadLayersModel(modelUrl);
+    
     document.getElementById('resultText').innerText = "AI 준비 완료!";
   } catch (error) {
-    document.getElementById('resultText').innerText = "모델 로드 실패";
-    console.error(error);
+    document.getElementById('resultText').innerText = "로드 실패: " + error.message;
+    console.error("Detail Error:", error);
   }
 }
 
-// 예측 함수
+// 예측 함수 내에서도 tfEngine(또는 window.tf)을 사용하세요.
 async function predict() {
   const inputVal = document.getElementById('numberInput').value;
   if (!inputVal || !model) return;
 
   const num = parseFloat(inputVal);
-  
-  // 파이썬 학습 시의 입력 형태 [None, 1]에 맞춰 텐서 생성
-  const inputTensor = tf.tensor2d([[num]]);
+  const inputTensor = tfEngine.tensor2d([[num]]);
   const prediction = model.predict(inputTensor);
-  const score = (await prediction.data())[0]; // 0~1 사이의 값 (sigmoid)
+  const score = (await prediction.data())[0];
 
   const result = score > 0.5 ? "홀수" : "짝수";
-  const confidence = (score > 0.5 ? score : 1 - score) * 100;
-
-  document.getElementById('resultText').innerText = 
-    `결과: ${result} (${confidence.toFixed(2)}%)`;
+  document.getElementById('resultText').innerText = `결과: ${result}`;
 }
 
 document.getElementById('predictBtn').addEventListener('click', predict);
@@ -327,5 +334,6 @@ loadModel();
 #### 2. 오른쪽 상단의 '개발자 모드'를 켭니다.
 #### 3. 왼쪽 상단의 '압축해제된 확장 프로그램을 로드' 버튼을 클릭.
 #### 4. 작업한 my_extension 폴더를 선택.
+#### 5. 크롬의 일반 웹브라우저 창으로 나가서 주소창 옆 퍼즐 아이콘 -> 방금 등록한 확장 프로그램 클릭 -> 고정핀 아이콘 클릭(항상 보이게 됨) -> 누르면 확장 프로그램이 실행
 #### 5. 확장 프로그램 아이콘을 클릭하여 숫자를 입력하고 결과를 확인
 
