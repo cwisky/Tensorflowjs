@@ -107,10 +107,90 @@ hello-world-extension/
 #### 3. 메시지를 클릭하면 사라짐
 
 ## Python기반에서 Tensorflow 모델 생성
+* 파이썬 가상환경 생성
+```bash
+# 1. 새로운 가상환경 생성 (파이썬 3.11 지정)
+conda create -n tfjs_fix python=3.11 -y
+
+# 2. 가상환경 활성화
+conda activate tfjs_fix
+
+# 3. 필수 패키지만 깔끔하게 설치
+pip install tensorflow==2.15.0 tensorflowjs==4.17.0
+```
+* 문제의 원인인 Decision Forests 모듈 제거
+```bash
+# 1. 활성화된 가상환경인지 확인 (tfjs_fix)
+# 2. 오류를 일으키는 Decision Forests 모듈 제거
+pip uninstall tensorflow-decision-forests -y
+```
+* 변환 툴은 오류를 발생하는 경우가 많으므로 아래의 코드를 사용하여 변환
+  + *.keras, *.h5 모두 생성해서 테스트한다 (h5 포맷이 호환성이 더 높음)
+```python
+import sys
+from types import ModuleType
+
+# 1. Windows/TFJS 호환성 가짜 모듈 주입
+dummy_tfdf = ModuleType('tensorflow_decision_forests')
+sys.modules['tensorflow_decision_forests'] = dummy_tfdf
+sys.modules['tensorflow_decision_forests.keras'] = ModuleType('keras')
+
+import tensorflow as tf
+import tensorflowjs as tfjs
+import h5py
+import numpy as np
+
+print("최종 수단: h5py 직접 접근 방식 시작 (2026)")
+
+# 2. 새 모델 정의 (학습 시 모델 구조와 정확히 일치해야 함)
+new_model = tf.keras.Sequential([
+    tf.keras.layers.Dense(16, activation='relu', input_shape=(1,), name='hidden_layer_1'),
+    tf.keras.layers.Dense(8, activation='relu', name='hidden_layer_2'),
+    tf.keras.layers.Dense(1, activation='sigmoid', name='output_layer')
+])
+
+# 3. h5 파일에서 가중치만 강제로 추출하여 주입
+# load_model을 쓰지 않고 파일 내부의 숫자 데이터만 가져옵니다.
+def load_weights_safely(model, weights_path):
+    with h5py.File(weights_path, 'r') as f:
+        # Keras h5 파일 내부 구조에서 가중치 그룹 찾기
+        if 'model_weights' in f:
+            f = f['model_weights']
+        
+        weights = []
+        for layer in model.layers:
+            # 레이어 이름에 해당하는 그룹에서 가중치(kernel, bias) 추출
+            g = f[layer.name]
+            # 최근 Keras는 레이어 이름 아래에 또 다른 그룹이 있을 수 있음
+            if layer.name in g:
+                g = g[layer.name]
+            
+            w = [np.array(g[p]) for p in g.attrs['weight_names']]
+            weights.extend(w)
+        model.set_weights(weights)
+
+try:
+    # 반드시 .h5 파일이 존재해야 합니다. (없다면 학습 코드에서 model.save('odd_even_model.h5') 실행)
+    load_weights_safely(new_model, 'odd_even_model.h5')
+    print("성공: 가중치를 강제로 이식했습니다.")
+    
+    # 4. TFJS 변환
+    tfjs.converters.save_keras_model(new_model, 'tfjs_model')
+    print("\n" + "="*50)
+    print("축하합니다! 모든 장애물을 극복하고 변환에 성공했습니다.")
+    print("결과물 확인: ./tfjs_model")
+    print("="*50)
+
+except Exception as e:
+    print(f"오류 발생: {e}")
+    print("힌트: 학습 코드에서 반드시 model.save('odd_even_model.h5')로 저장한 뒤 시도하세요.")
+```
+
 * 홀수/짝수 분류모델 생성
 
 ## Tensorflow 모델을 Javascript기반에서 실행할 수 있도록 변환하기
 * 파이썬 기반에서 Tensorflowjs 모듈을 사용하여 모델 변환
+  + 아래의 방법은 버전 차이로 오류를 발생할 경우가 많으므로 위의 변환용 코드를 사용하는 것을 고려해야 함
 ```python
 # tensorflowjs_converter --input_format=keras [모델경로] [저장될디렉토리]
 tensorflowjs_converter --input_format=keras ./odd_even_model.keras ./tfjs_model
