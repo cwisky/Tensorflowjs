@@ -176,7 +176,7 @@ for num in test_numbers:
 tensorflowjs_converter --input_format=keras ./odd_even_model.keras ./tfjs_model
 ```
 * 변환용 코드를 사용하여 변환하기(*.keras, *.h5 모두 생성해서 테스트한다 (h5 포맷이 호환성이 더 높음))
-* 아래의 코드에서 사용된 가중치만 로드하는 방식은 파일의 구조에 의존하지 않으므로 호환성이 더 높음음
+* 아래의 코드에서 사용된 가중치만 로드하는 방식은 파일의 구조에 의존하지 않으므로 호환성이 더 높음
 ```python
 import sys
 from types import ModuleType
