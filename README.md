@@ -423,6 +423,7 @@ const SUSPICIOUS_TYPES = [
 
 chrome.devtools.network.onRequestFinished.addListener(
   (request) => {
+    const url = request.request.url;
     const mime = request.response.content.mimeType;
 
     if (!SUSPICIOUS_TYPES.some(t => mime.includes(t))) {
