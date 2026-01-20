@@ -731,7 +731,7 @@ chrome.devtools.network.onRequestFinished.addListener(
 * 👉 즉, DevTools 확장 프로그램에 최적화된 Feature Set
 
 
-## 5. Feature Vector를 입력으로 받는 TensorFlow.js 모델 연결 및 추론론
+## 5. Feature Vector를 입력으로 받는 TensorFlow.js 모델 연결 및 추론
 ### 5-1 전체 흐름 한 눈에 보기
 ```scss
 Network Response
@@ -742,6 +742,7 @@ Network Response
 ```
 ### 5-2 파일 구조 (권장)
 * DevTools Extension에서는 CDN 사용을 권장하지 않음 (네트워크 차단, CSP 문제 방지)
+* 함수들은 모두 features.js 파일에 선언
 ```text
 malware-devtools-extension/
 ├─ manifest.json
@@ -838,7 +839,102 @@ chrome.devtools.network.onRequestFinished.addListener(
 );
 ```
 
-### 5-7 메모리 관리 (DevTools Extension에서 매우 중요)
+### 5-7 devtools.js 전체 예제 (실전용, 권장)
+```js
+// ============================================
+// devtools.js
+// DevTools Malware Scanner - ML Pipeline
+// ============================================
+
+// ---- Global Model State ----
+let model = null;
+let modelReady = false;
+
+// ---- 1. Load TensorFlow.js Model (ONCE) ----
+async function loadModel() {
+  try {
+    const modelUrl = chrome.runtime.getURL("model/model.json");
+    model = await tf.loadLayersModel(modelUrl);
+    modelReady = true;
+    console.log("[ML] Model loaded successfully");
+  } catch (err) {
+    console.error("[ML] Model loading failed:", err);
+  }
+}
+
+// Load model immediately when DevTools opens
+loadModel();
+
+// ---- 2. Prediction Function ----
+function predictMalicious(features) {
+  if (!modelReady) return null;
+
+  // Expecting features.length === 14
+  const input = tf.tensor2d([features], [1, 14]);
+
+  const output = model.predict(input);
+  const score = output.dataSync()[0];
+
+  // IMPORTANT: prevent memory leak
+  input.dispose();
+  output.dispose();
+
+  return score;
+}
+
+// ---- 3. Network Response Hook ----
+chrome.devtools.network.onRequestFinished.addListener(
+  (request) => {
+    request.getContent((body) => {
+      // Basic guards
+      if (!body || body.length < 50) return;
+      if (!modelReady) return;
+
+      // MIME-type filtering (recommended)
+      const mime = request.response.content.mimeType || "";
+      if (
+        !mime.includes("javascript") &&
+        !mime.includes("html") &&
+        !mime.includes("json")
+      ) {
+        return;
+      }
+
+      try {
+        // ---- Feature Extraction ----
+        const features = extractFeatures(body);
+
+        // ---- ML Inference ----
+        const score = predictMalicious(features);
+
+        if (score === null) return;
+
+        // ---- Output ----
+        if (score > 0.7) {
+          console.warn(
+            "[MALICIOUS]",
+            request.request.url,
+            "score:",
+            score.toFixed(3)
+          );
+        } else {
+          console.log(
+            "[BENIGN]",
+            request.request.url,
+            "score:",
+            score.toFixed(3)
+          );
+        }
+
+      } catch (err) {
+        console.error("[SCAN ERROR]", err);
+      }
+    });
+  }
+);
+```
+
+### 5-8 메모리 관리 (DevTools Extension에서 매우 중요)
 * 메모리가 부족하면 DevTools가 느려지고 멈추게 된다
 ```js
 const input = tf.tensor2d([features], [1, 14]);
@@ -854,7 +950,7 @@ tf.tidy(() => {
 });
 ```
 
-### 5-8 정상 동작 체크 포인트
+### 5-9 정상 동작 체크 포인트
 * ✔ 모델 1회 로드
 * ✔ 네트워크 응답마다 score 출력
 * ✔ threshold 초과 시 경고
@@ -862,8 +958,10 @@ tf.tidy(() => {
 [ML] Model loaded
 [MALICIOUS] https://example.com/script.js 0.83
 ```
-### 5-9 여러 응답 점수를 하나의 페이지 Risk Score로 합치는 방법
+### 5-10 여러 응답 점수를 하나의 페이지 Risk Score로 합치는 방법
 
-### 5-10 휴리스틱 룰 + ML 점수 결합 전략
+### 5-11 휴리스틱 룰 + ML 점수 결합 전략
 
 ## 6. 14차원의 Feature Vector를 이용한 Tensorflow 악성코드 분류모델 생성
+
+### 6-1 Feature Vector → 모델 학습용 데이터셋 설계
