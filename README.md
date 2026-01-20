@@ -432,6 +432,7 @@ chrome.devtools.network.onRequestFinished.addListener(
       request.getContent(function (body) {
         if (!body) return;
         console.log(body.substring(0, 300));
+        // 👉 ML 분석 대상
       });
 
     } catch (e) {
