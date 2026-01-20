@@ -351,3 +351,87 @@ Chrome
          └─ devtools_page (확장)
              └─ JS로 네트워크 요청/응답 접근
 ```
+### 3-2 기본 파일 구조
+```text
+malware-devtools-extension/
+├─ manifest.json
+├─ devtools.html
+├─ devtools.js
+└─ (추후)
+   ├─ tfjs/
+   ├─ model.json
+   └─ classifier.js
+```
+
+### 3-3 manifest.json (DevTools Extension 선언)
+* devtools_page 선언이 핵심
+```json
+{
+  "manifest_version": 3,
+  "name": "DevTools Malware Scanner",
+  "version": "1.0",
+  "description": "Scan web responses for malicious code",
+  "devtools_page": "devtools.html"
+}
+```
+
+### 3-4 devtools.html
+* UI선언도 가능하지만 처음에는 JS 로드만으로도 충분함
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <script src="devtools.js"></script>
+</body>
+</html>
+```
+
+### 3-5 devtools.js
+* chrome.devtools.network.onRequestFinished : 네트워크 요청이 완전히 끝난 후에 발생하는 이벤
+```js
+chrome.devtools.network.onRequestFinished.addListener(
+  (request) => {
+    console.log("URL:", request.request.url);
+    console.log("Method:", request.request.method);
+    console.log("Status:", request.response.status);
+    console.log("MimeType:", request.response.content.mimeType);
+
+    request.getContent((body, encoding) => {
+      console.log("Response body:", body);   // body: 문자열 (이미 디코딩됨)
+      console.log("Encoding:", encoding);    // encoding: "base64" | null
+
+      // 👉 여기에 악성코드 검사 로직 연결
+    });
+  }
+);
+```
+
+### 3-6 악성코드 분석에 필요한 최소 필터링
+* 실무에서는 모든 응답을 검사하지 않음
+```js
+const SUSPICIOUS_TYPES = [
+  "application/javascript",
+  "text/javascript",
+  "text/html",
+  "application/json"
+];
+
+chrome.devtools.network.onRequestFinished.addListener(
+  (request) => {
+    const mime = request.response.content.mimeType;
+
+    if (!SUSPICIOUS_TYPES.some(t => mime.includes(t))) {
+      return;
+    }
+
+    request.getContent((body) => {
+      if (!body || body.length < 50) return;
+
+      // 👉 ML 분석 대상
+    });
+  }
+);
+```
