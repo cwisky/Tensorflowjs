@@ -723,7 +723,7 @@ chrome.devtools.network.onRequestFinished.addListener(
 ```
 ### 4-3-1 위에서 선언한 DevTools 확장 프로그램 테스트
 * 위의 확장 프로그램이 실행되면 DevTools 콘솔에 14차원 Feature Vector가 생성되어 표시됨
-* 네트워크 접속 시도 횟수만큼의 Feature Vector 수가 생성됨
+* 한개의 요청 안에서 네트워크 접속 시도 횟수만큼의 Feature Vector 수가 생성됨
 * 컨텐츠가 길어도 네트워크 접속 1회마다 14차원 벡터 1개가 생성됨
 * 요청 1개에서는 내부에서 많은 네트워크 접속이 이루어져서 컨텐츠를 다운로드하므로 다수개의 Feature Vector가 생성
 * ✔ 14차원은 → 지금까지 정의한 Feature 함수들이 만들어낸 결과의 개수이다.
