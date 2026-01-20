@@ -959,6 +959,160 @@ tf.tidy(() => {
 [MALICIOUS] https://example.com/script.js 0.83
 ```
 ### 5-10 여러 응답 점수를 하나의 페이지 Risk Score로 합치는 방법
+* ✔ 탐지력
+* ✔ 안정성
+* ✔ 설명 가능성
+* ➡️ 실무에서 가장 많이 선택됨
+* Hybrid (Max + Count) ⭐⭐⭐ (강력 추천)
+```text
+pageRisk = max(score_i) * α + count_ratio * (1-α)
+```
+#### 5-10-1 PageRisk 점수를 계산하는 DevTools Extension용 구현 예제
+```js
+// ======================================================
+// devtools.js
+// DevTools Malware Scanner – Page-level Risk Aggregation
+// ======================================================
+
+// ------------------------------
+// Global State
+// ------------------------------
+let model = null;
+let modelReady = false;
+
+// Page-level accumulated scores
+let pageScores = [];
+
+// ------------------------------
+// 1. Load TensorFlow.js Model (ONCE)
+// ------------------------------
+async function loadModel() {
+  try {
+    const modelUrl = chrome.runtime.getURL("model/model.json");
+    model = await tf.loadLayersModel(modelUrl);
+    modelReady = true;
+    console.log("[ML] Model loaded");
+  } catch (err) {
+    console.error("[ML] Failed to load model:", err);
+  }
+}
+
+// Load model when DevTools opens
+loadModel();
+
+// ------------------------------
+// 2. Single-response Prediction
+// ------------------------------
+function predictMalicious(features) {
+  if (!modelReady) return null;
+
+  // Expecting features.length === 14
+  const input = tf.tensor2d([features], [1, 14]);
+  const output = model.predict(input);
+  const score = output.dataSync()[0];
+
+  // Prevent memory leak
+  input.dispose();
+  output.dispose();
+
+  return score;
+}
+
+// ------------------------------
+// 3. Page-level Risk Aggregation
+// ------------------------------
+function computePageRisk(scores) {
+  if (!scores || scores.length === 0) {
+    return {
+      pageRisk: 0,
+      maxScore: 0,
+      suspiciousCount: 0,
+      total: 0
+    };
+  }
+
+  const maxScore = Math.max(...scores);
+  const threshold = 0.7;
+  const suspiciousCount = scores.filter(s => s > threshold).length;
+  const countRatio = suspiciousCount / scores.length;
+
+  const alpha = 0.7; // weight for max score
+  const pageRisk = alpha * maxScore + (1 - alpha) * countRatio;
+
+  return {
+    pageRisk,
+    maxScore,
+    suspiciousCount,
+    total: scores.length
+  };
+}
+
+// ------------------------------
+// 4. Network Response Hook
+// ------------------------------
+chrome.devtools.network.onRequestFinished.addListener(
+  (request) => {
+    request.getContent((body) => {
+      if (!body || body.length < 50) return;
+      if (!modelReady) return;
+
+      const mime = request.response.content.mimeType || "";
+      if (
+        !mime.includes("javascript") &&
+        !mime.includes("html") &&
+        !mime.includes("json")
+      ) {
+        return;
+      }
+
+      try {
+        // ---- Feature Extraction ----
+        const features = extractFeatures(body);
+
+        // ---- ML Inference ----
+        const score = predictMalicious(features);
+        if (score === null) return;
+
+        // ---- Accumulate page-level scores ----
+        pageScores.push(score);
+
+        // ---- Compute page risk ----
+        const result = computePageRisk(pageScores);
+
+        // ---- Output ----
+        if (result.pageRisk > 0.8) {
+          console.warn(
+            "[PAGE HIGH RISK]",
+            "risk:", result.pageRisk.toFixed(3),
+            "| max:", result.maxScore.toFixed(3),
+            "| suspicious:", result.suspiciousCount,
+            "/", result.total
+          );
+        } else {
+          console.log(
+            "[PAGE STATUS]",
+            "risk:", result.pageRisk.toFixed(3),
+            "| max:", result.maxScore.toFixed(3),
+            "| suspicious:", result.suspiciousCount,
+            "/", result.total
+          );
+        }
+
+      } catch (err) {
+        console.error("[SCAN ERROR]", err);
+      }
+    });
+  }
+);
+
+// ------------------------------
+// 5. Reset on Page Navigation
+// ------------------------------
+chrome.devtools.network.onNavigated.addListener(() => {
+  pageScores = [];
+  console.log("[PAGE] Navigation detected – scores reset");
+});
+```
 
 ### 5-11 휴리스틱 룰 + ML 점수 결합 전략
 
