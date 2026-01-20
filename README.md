@@ -428,10 +428,13 @@ chrome.devtools.network.onRequestFinished.addListener(
     if (!SUSPICIOUS_TYPES.some(t => mime.includes(t))) {
       return;
     }
+    console.log("[SCAN]", url, mime);
 
     request.getContent((body) => {
       if (!body || body.length < 50) return;
-
+      console.log("----- RESPONSE BODY START -----");
+      console.log(body.slice(0, 500)); // 처음 500자만 출력
+      console.log("----- RESPONSE BODY END -----");
       // 👉 ML 분석 대상
     });
   }
