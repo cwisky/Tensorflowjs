@@ -1,7 +1,11 @@
-# Tensorflowjs
-* Python 기반에서 생성된 머신러닝 모델을 Javascript기반에서 실행할 수 있도록 변환해주는 파이썬 모듈
+# Tensorflowjs/Tensorflow.js
+
+## Tensorflowjs
+* Python 모듈이며 Tensorflow 모델을 Javascript에서 사용할 수 있는 모델로 변환
 * 변환된 모델은 model.json, group1-shard1of1.bin 파일을 포함
-* Javascript에서는 Tensorflow.js 라이브러리를 사용하여 model.json을 로드하고 사용함
+
+## Tensorflow.js
+* Javascritp 라이브러리리이며 자바스크립트 버전으로 변환된 Tensorflow 모델을 사용하는 라이브러리
 * 크롬 확장프로그램에서 실행되는 Javascript에 model.json, group1-shard1of1.bin을 포함시키면 브라우저 기반에서 모델을 사용할 수 있음
 
 ## 크롬 브라우저에서 Hello World 확장프로그램 (Chrome Extension) 작성하기
@@ -331,3 +335,19 @@ loadModel();
 #### 5. 크롬의 일반 웹브라우저 창으로 나가서 주소창 옆 퍼즐 아이콘 -> 방금 등록한 확장 프로그램 클릭 -> 고정핀 아이콘 클릭(항상 보이게 됨) -> 누르면 확장 프로그램이 실행
 #### 5. 확장 프로그램 아이콘을 클릭하여 숫자를 입력하고 결과를 확인
 
+## 3. 크롬 브라우저에서 DevTools Extension 생성하기
+* 일반 확장 프로그램과 달리 크롬의 개발자 도구를 사용해야 함
+* 웹 응답 데이터에 대한 완전한 접근 허용
+  + ✔ 압축 해제된 실제 응답 본문
+  + ✔ JS / HTML / JSON / Text
+  + ✔ 악성코드 분석에 필요한 원본 데이터
+* 보안 분석 도구, 기업용 검사 시스템은 거의 전부 이 구조를 사용
+
+### 3-1 DevTools Extension 구조 개요
+```markdown
+Chrome
+ └─ DevTools
+     └─ Network Panel
+         └─ devtools_page (확장)
+             └─ JS로 네트워크 요청/응답 접근
+```
