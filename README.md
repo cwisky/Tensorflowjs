@@ -448,3 +448,177 @@ chrome.devtools.network.onRequestFinished.addListener(
 * 다른 탭을 열고 > 주소창 3점 아이콘 클릭 > 도구 더보기 > 개발자 도구
 * 개발자 도구가 열린 채로 원하는 웹사이트에 접속, 개발자 도구가 열리지 않은 상태로 접속하면 DevTools 확장 프로그램이 작동하지 않음
 * chrome://extensions/ 접속 -> 해당 확장프로그램에서 "뷰 검사" 링크 클릭 > DevTools 창의 console에서 메시지 출력 확인
+
+<br>
+
+## 4. DevTools 확장 프로그램에서 얻은 Response Body를 ML 입력을 위한 Feature로 변환하기
+* 브라우저 확장 환경 → 경량 + 빠름이 최우선
+* 정적 특징(Static Features) 중심
+* 정적 + ML + 휴리스틱 혼합이 업계 표준
+  
+### 4-1 전체 그림
+```css
+Response Body (JS / HTML / JSON / Text)
+ └─ Preprocessing
+     ├─ 정규화 (Normalization)
+     ├─ 길이 / 문자 통계
+     ├─ 키워드 / API 사용 패턴
+     ├─ 난독화 지표
+     ├─ 구조적 패턴
+ └─ Feature Vector (숫자 배열)
+     └─ TensorFlow.js 모델 입력
+```
+### 4-2 전처리 (Preprocessing)
+* 텍스트가 포함한 특성들을 Feature Vector로 생성 (Feature Vector는 모델에 입력할 수 있는 숫자로 구성됨)
+#### 4-2-1 기본 정규화 (필수)
+* ✔ 난독화 차이 감소
+* ✔ Feature 안정성 증가
+```js
+function normalizeText(text) {
+  return text
+    .replace(/\s+/g, " ")   // 공백 정리
+    .replace(/[^\x20-\x7E]/g, "") // 비ASCII 제거
+    .toLowerCase();
+}
+```
+#### 4-2-2 길이 기반 Feature (가장 강력)
+* 악성 JS는 비정상적으로 길거나 반대로 짧은 1줄 eval 형태가 많음
+```js
+function lengthFeatures(text) {
+  return {
+    length: text.length,
+    lineCount: text.split("\n").length,
+    avgLineLength: text.length / Math.max(1, text.split("\n").length)
+  };
+}
+```
+#### 4-2-3 문자 통계 기반 Feature (난독화 탐지 핵심)
+* 문자 분포포
+```js
+function charStats(text) {
+  const total = text.length;
+  let digits = 0, letters = 0, symbols = 0;
+
+  for (const c of text) {
+    if (/[0-9]/.test(c)) digits++;
+    else if (/[a-z]/i.test(c)) letters++;
+    else symbols++;
+  }
+
+  return {
+    digitRatio: digits / total,
+    letterRatio: letters / total,
+    symbolRatio: symbols / total
+  };
+}
+```
+* 엔트로피(Entropy) (중요)
+  + 정상 JS: 3.5 ~ 4.5
+  + 난독화 JS: 5.0 이상
+```js
+function entropy(text) {
+  const freq = {};
+  for (const c of text) freq[c] = (freq[c] || 0) + 1;
+
+  let ent = 0;
+  const len = text.length;
+
+  for (const c in freq) {
+    const p = freq[c] / len;
+    ent -= p * Math.log2(p);
+  }
+  return ent;
+}
+```
+#### 4-2-4 악성 키워드 / API 패턴 Feature
+* 고위험 키워드 카운트
+```js
+const SUSPICIOUS_KEYWORDS = [
+  "eval",
+  "function(",
+  "new function",
+  "settimeout(",
+  "setinterval(",
+  "atob(",
+  "fromcharcode",
+  "document.write",
+  "window.location",
+  "unescape("
+];
+
+function keywordFeatures(text) {
+  const features = {};
+  for (const key of SUSPICIOUS_KEYWORDS) {
+    const regex = new RegExp(key, "g");
+    features[key] = (text.match(regex) || []).length;
+  }
+  return features;
+}
+```
+* 네트워크 / C2 힌트
+```js
+function networkHints(text) {
+  return {
+    hasHttp: /http:\/\//.test(text) ? 1 : 0,
+    hasHttps: /https:\/\//.test(text) ? 1 : 0,
+    hasIP: /\b\d{1,3}(\.\d{1,3}){3}\b/.test(text) ? 1 : 0
+  };
+}
+```
+#### 4-2-5 구조적 Feature (JS / HTML 공통)
+```js
+function structureFeatures(text) {
+  return {
+    scriptTagCount: (text.match(/<script/gi) || []).length,
+    iframeCount: (text.match(/<iframe/gi) || []).length,
+    base64Like: (text.match(/[A-Za-z0-9+/]{100,}={0,2}/g) || []).length
+  };
+}
+```
+#### 4-2-6 Feature Vector로 변환 (ML 입력)
+* TensorFlow.js는 숫자 배열을 요구함
+* ✔ 고정 길이 벡터
+* ✔ JS/HTML 공통 사용 가능
+* ✔ 브라우저에서 빠름
+```js
+function extractFeatures(rawText) {
+  const text = normalizeText(rawText);
+
+  const f1 = lengthFeatures(text);
+  const f2 = charStats(text);
+  const f3 = keywordFeatures(text);
+  const f4 = networkHints(text);
+  const f5 = structureFeatures(text);
+
+  return [
+    f1.length,
+    f1.lineCount,
+    f1.avgLineLength,
+    f2.digitRatio,
+    f2.letterRatio,
+    f2.symbolRatio,
+    entropy(text),
+    ...Object.values(f3),
+    f4.hasHttp,
+    f4.hasHttps,
+    f4.hasIP,
+    f5.scriptTagCount,
+    f5.iframeCount,
+    f5.base64Like
+  ];
+}
+```
+#### 4-2-7 DevTools Extension에서의 실제 연결 위치
+```js
+request.getContent((body) => {
+  if (!body || body.length < 50) return;
+
+  const features = extractFeatures(body);
+
+  console.log("Feature Vector:", features);
+
+  // 다음 단계:
+  // model.predict(tf.tensor([features]))
+});
+```
+
