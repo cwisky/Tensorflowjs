@@ -414,30 +414,29 @@ chrome.devtools.network.onRequestFinished.addListener(
 ### 3-6 악성코드 분석에 필요한 최소 필터링
 * 실무에서는 모든 응답을 검사하지 않음
 ```js
-const SUSPICIOUS_TYPES = [
-  "application/javascript",
-  "text/javascript",
-  "text/html",
-  "application/json"
+const ALLOW = [
+  "javascript",
+  "html",
+  "json"
 ];
-
 chrome.devtools.network.onRequestFinished.addListener(
-  (request) => {
-    const url = request.request.url;
-    const mime = request.response.content.mimeType;
+  function (request) {
+    try {
+      const url = request.request.url;
+      const mime = request.response.content.mimeType || "unknown";
 
-    if (!SUSPICIOUS_TYPES.some(t => mime.includes(t))) {
-      return;
+      if (!ALLOW.some(type => mime.includes(type))) return;
+      
+      console.log("[SCAN]", url, mime);
+
+      request.getContent(function (body) {
+        if (!body) return;
+        console.log(body.substring(0, 300));
+      });
+
+    } catch (e) {
+      console.error("DevTools error:", e);
     }
-    console.log("[SCAN]", url, mime);
-
-    request.getContent((body) => {
-      if (!body || body.length < 50) return;
-      console.log("----- RESPONSE BODY START -----");
-      console.log(body.slice(0, 500)); // 처음 500자만 출력
-      console.log("----- RESPONSE BODY END -----");
-      // 👉 ML 분석 대상
-    });
   }
 );
 ```
