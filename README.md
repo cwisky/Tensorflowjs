@@ -441,3 +441,10 @@ chrome.devtools.network.onRequestFinished.addListener(
   }
 );
 ```
+
+### 3-7 확장 프로그램 등록 및 테스트
+* chrome://extensions/ 접속
+* 압축해제된 확장 프로그램 로드 -> "확장 프로그램 로드됨" 메시지 확인
+* 다른 탭을 열고 > 주소창 3점 아이콘 클릭 > 도구 더보기 > 개발자 도구
+* 개발자 도구가 열린 채로 원하는 웹사이트에 접속
+* chrome://extensions/ 접속 -> 해당 확장프로그램에서 "뷰 검사" 링크 클릭 > DevTools 창의 console에서 메시지 출력 확인
