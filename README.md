@@ -1119,3 +1119,191 @@ chrome.devtools.network.onNavigated.addListener(() => {
 ## 6. 14차원의 Feature Vector를 이용한 Tensorflow 악성코드 분류모델 생성
 
 ### 6-1 Feature Vector → 모델 학습용 데이터셋 설계
+* 실제 악성코드와 실제 정상 코드 그리고 모의 데이터로 구성해야 함
+* 실제 악성 코드는 사람이 짐작하기 어렵게 되어 있거나 이미 알려진 방식을 회피하고 있음
+* Feature Vector의 형태
+```json
+{
+  "features": [14 numbers],
+  "label": 1
+}
+```
+### 6-2 모의 데이터로 Feature Vector 생성하는 예
+* 실제 Feature 분포를 모르면 위험
+* 모델이 “가짜 경계”를 학습할 수 있음
+```js
+function generateMockFeature(malicious=true) {
+  if (malicious) {
+    return [
+      5000, 1, 5000,   // length, lines, avg
+      0.4, 0.2, 0.4,   // char ratios
+      5.8,             // entropy
+      2,1,1,1,1,0,1    // keyword counts
+    ];
+  }
+  return [
+      800, 40, 20,
+      0.1, 0.7, 0.2,
+      3.9,
+      0,0,0,0,1,0,0
+  ];
+}
+```
+
+### 6-3 현실적인 학습 전략 (권장)
+#### ✅ 단계 1: 구조 검증 (PoC)
+* 소량 실제 데이터
+* 모의 데이터
+* 모델 구조 검증
+#### ✅ 단계 2: 실제 데이터 중심 학습
+* 실제 정상 + 실제 악성
+* Feature 분포 분석
+* threshold 조정
+#### ✅ 단계 3: 운영 튜닝
+* False Positive 로그 수집
+* Feature 조정
+* 재학습
+
+### 6-4 모의 데이터를 사용한 전체 개념 검증(PoC, Proof of Concept)
+#### 6-4-1 전체 절차 요약 (한 눈에)
+```scss
+[1] 14차원 Feature 정의 확정
+[2] 모의 Feature Vector 생성 (Python)
+[3] TensorFlow 분류 모델 학습 (Python)
+[4] TensorFlow.js 모델로 변환
+[5] DevTools Extension에 모델 적용
+[6] PoC 검증 포인트 확인
+```
+#### 6-4-2 전제 조건 (지금 상태 점검)
+* ✔ Feature 차원: 14
+* ✔ labels:
+  + 0 = 정상 (benign)
+  + 1 = 악성 (malicious)
+  + ✔ 모델 목적: 이진 분류
+
+#### 6-4-3 모의 Feature Vector 설계 원칙 (중요)
+* ❗ “임의 난수”로 만들면 안
+* 반드시 반영해야 할 것
+  + 악성 / 정상의 분포 차이
+  + Feature 간 상관관계
+  + 현실적인 범위
+* Feature 의미
+
+| Index | Feature       | 정상 경향    | 악성 경향      |
+| ----- | ------------- | -------- | ---------- |
+| 0     | length        | 300~2000 | 1000~10000 |
+| 1     | lineCount     | 多        | 1~3        |
+| 2     | avgLineLength | 낮음       | 매우 높음      |
+| 3     | digitRatio    | 낮음       | 높음         |
+| 4     | letterRatio   | 높음       | 낮음         |
+| 5     | symbolRatio   | 보통       | 높음         |
+| 6     | entropy       | 3.5~4.5  | 5.0~6.5    |
+| 7~13  | keyword count | 거의 0     | ≥1         |
+
+#### 6-4-4 모의 데이터 생성 (Python)
+* generate_mock_data.py
+```python
+"""
+Mock dataset generator for 14D malware feature vectors
+"""
+
+import numpy as np
+
+np.random.seed(42)
+
+NUM_SAMPLES = 2000
+
+X = []
+y = []
+
+def benign_sample():
+    return [
+        np.random.randint(300, 2000),        # length
+        np.random.randint(10, 80),            # lines
+        np.random.uniform(10, 60),             # avg line length
+        np.random.uniform(0.05, 0.15),         # digitRatio
+        np.random.uniform(0.6, 0.8),           # letterRatio
+        np.random.uniform(0.1, 0.25),          # symbolRatio
+        np.random.uniform(3.5, 4.5),           # entropy
+        *np.random.binomial(1, 0.05, 7)        # keyword counts
+    ]
+
+def malicious_sample():
+    return [
+        np.random.randint(1000, 10000),
+        np.random.randint(1, 5),
+        np.random.uniform(200, 2000),
+        np.random.uniform(0.25, 0.45),
+        np.random.uniform(0.1, 0.3),
+        np.random.uniform(0.3, 0.6),
+        np.random.uniform(5.0, 6.5),
+        *np.random.binomial(3, 0.6, 7)
+    ]
+
+for _ in range(NUM_SAMPLES // 2):
+    X.append(benign_sample())
+    y.append(0)
+
+for _ in range(NUM_SAMPLES // 2):
+    X.append(malicious_sample())
+    y.append(1)
+
+X = np.array(X, dtype=np.float32)
+y = np.array(y, dtype=np.float32)
+```
+
+#### 6-4-5 TensorFlow 모델 학습 (Python)
+* train_model.py
+```python
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(14,)),
+    tf.keras.layers.Dense(32, activation="relu"),
+    tf.keras.layers.Dense(16, activation="relu"),
+    tf.keras.layers.Dense(1, activation="sigmoid")
+])
+
+model.compile(
+    optimizer="adam",
+    loss="binary_crossentropy",
+    metrics=["accuracy"]
+)
+
+model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=20,
+    batch_size=32
+)
+
+model.save("saved_model")
+```
+
+#### 6-4-6 TensorFlow.js 포맷으로 모델 변환
+* 변환용 툴(tensorflowjs_converter)을 사용하거나 변환용 코드를 사용하는 방법이 있음
+* tensorflowjs 모듈에 포함된 tensorflowjs_converter는 버전에 따라 호환이 안되는 오류가 흔함
+* 변환된 결과 아래의 파일이 생성됨
+  + model.json
+  + group1-shard1of1.bin
+
+#### 6-4-7 DevTools Extension에 적용
+* 이미 구성된 구조를 그대로 사용
+```text
+malware-devtools-extension/
+├─ devtools.js
+├─ features.js
+├─ tf.min.js
+└─ model/
+    ├─ model.json
+    └─ group1-shard1of1.bin
+```
+* 확장 프로그램 로드 후에 DevTools에서 확인
+```text
+[MALICIOUS] https://example.com/script.js score: 0.82
+```
