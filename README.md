@@ -455,6 +455,7 @@ chrome.devtools.network.onRequestFinished.addListener(
 * 브라우저 확장 환경 → 경량 + 빠름이 최우선
 * 정적 특징(Static Features) 중심
 * 정적 + ML + 휴리스틱 혼합이 업계 표준
+* 아래에 소개되는 모든 함수는 onRequestFinished 이벤트 핸들러와 동등한 레벨에 선언하고 request.getContent() 함수 안에서 호출되어야 함함
   
 ### 4-1 전체 그림
 ```css
@@ -622,3 +623,114 @@ request.getContent((body) => {
 });
 ```
 
+### 4-3 실제 devtools.js 예제 (실행 가능한 형태)
+* devtools.js
+```js
+// ===============================
+// Feature Extraction (GLOBAL)
+// ===============================
+
+function normalizeText(text) {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .toLowerCase();
+}
+
+function lengthFeatures(text) {
+  const lines = text.split("\n");
+  return {
+    length: text.length,
+    lineCount: lines.length,
+    avgLineLength: text.length / Math.max(1, lines.length)
+  };
+}
+
+function charStats(text) {
+  let digits = 0, letters = 0, symbols = 0;
+  for (const c of text) {
+    if (/[0-9]/.test(c)) digits++;
+    else if (/[a-z]/i.test(c)) letters++;
+    else symbols++;
+  }
+  const total = text.length || 1;
+  return {
+    digitRatio: digits / total,
+    letterRatio: letters / total,
+    symbolRatio: symbols / total
+  };
+}
+
+function entropy(text) {
+  const freq = {};
+  for (const c of text) freq[c] = (freq[c] || 0) + 1;
+  let ent = 0;
+  const len = text.length || 1;
+  for (const c in freq) {
+    const p = freq[c] / len;
+    ent -= p * Math.log2(p);
+  }
+  return ent;
+}
+
+const SUSPICIOUS_KEYWORDS = [
+  "eval", "atob", "fromcharcode", "document.write",
+  "settimeout", "setinterval", "unescape"
+];
+
+function keywordFeatures(text) {
+  const result = {};
+  for (const k of SUSPICIOUS_KEYWORDS) {
+    result[k] = (text.match(new RegExp(k, "g")) || []).length;
+  }
+  return result;
+}
+
+function extractFeatures(rawText) {
+  const text = normalizeText(rawText);
+  const lf = lengthFeatures(text);
+  const cs = charStats(text);
+  const kw = keywordFeatures(text);
+
+  return [
+    lf.length,
+    lf.lineCount,
+    lf.avgLineLength,
+    cs.digitRatio,
+    cs.letterRatio,
+    cs.symbolRatio,
+    entropy(text),
+    ...Object.values(kw)
+  ];
+}
+
+// ===============================
+// DevTools Network Hook
+// ===============================
+
+chrome.devtools.network.onRequestFinished.addListener(
+  (request) => {
+    request.getContent((body) => {
+      if (!body || body.length < 50) return;
+
+      const features = extractFeatures(body);
+      console.log("[FEATURE VECTOR]", features);
+      // 다음 단계:
+      // model.predict(tf.tensor([features]))
+    });
+  }
+);
+```
+### 4-3-1 위에서 선언한 DevTools 확장 프로그램 테스트
+* 위의 확장 프로그램이 실행되면 DevTools 콘솔에 14차원 Feature Vector가 생성되어 표시됨
+* 네트워크 접속 시도 횟수만큼의 Feature Vector 수가 생성됨
+* 컨텐츠가 길어도 네트워크 접속 1회마다 14차원 벡터 1개가 생성됨
+* 요청 1개에서는 내부에서 많은 네트워크 접속이 이루어져서 컨텐츠를 다운로드하므로 다수개의 Feature Vector가 생성
+* ✔ 14차원은 → 지금까지 정의한 Feature 함수들이 만들어낸 결과의 개수이다.
+* 사람이 이해할 수 있는 14개의 ‘의심 지표’를 동시에 보고 판단
+* 👉 즉, DevTools 확장 프로그램에 최적화된 Feature Set
+
+
+## 5. Tensorflow 악성코드 분류 모델 작성하기
+* “위 Feature Vector를 입력으로 받는 TensorFlow.js 모델을 DevTools Extension에 로드하고 추론하는 방법을 알려주세요.”
+* 
